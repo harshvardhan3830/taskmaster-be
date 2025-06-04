@@ -10,21 +10,23 @@ export const register = async (req, res) => {
             return res.status(400).json({ errors: errors.array() });
         }
 
-        const { username, email, password } = req.body;
+        const { name, email, password, role } = req.body;
         // Validate input data
-        if (!username || !email || !password) {
-            return res.status(400).json({ error: 'Username, email, and password are required' });
+        if (!name || !email || !password) {
+            return res.status(400).json({ error: 'Name, email, and password are required' });
         }
         // Check if user already exists
         const existingUser = await User.find({ email });
-        if (existingUser) {
-            return res.status(400).json({ error: 'User already exists' });
+
+        console.log('existingUser', existingUser);
+        if (existingUser.length > 0) {
+            return res.status(400).json({ message: 'User already exists', success: false });
         }
         // Hash the password
         const hashedPassword = await hashPassword(password);
         // Create a new user
         const newUser = new User({
-            username,
+            name,
             email,
             password: hashedPassword,
         });
@@ -67,12 +69,18 @@ export const login = async (req, res) => {
         if (!isMatch) {
             return res.status(401).json({ error: 'Invalid email or password' });
         }
+
+        const { password: _, ...userWithoutPassword } = user.toObject();
         // Generate a token
         const token = generateToken({ id: user._id, email: user.email }, process.env.JWT_SECRET, {
             expiresIn: '7d',
         });
 
-        return res.status(200).json({ message: 'Login successful', data: { user, token }, success: true });
+        await User.findByIdAndUpdate(user._id, { lastLogin: new Date() });
+
+        return res
+            .status(200)
+            .json({ message: 'Login successful', data: { user: userWithoutPassword, token }, success: true });
     } catch (error) {
         console.error('Error during login:', error);
         res.status(500).json({ error: 'Internal server error' });
