@@ -1,7 +1,7 @@
 import Express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-
+import helmet from 'helmet';
 import connectDB from './config/db.conf.js'; // Import the database connection function
 import routes from './routes/v1/index.js';
 import Route from './routes/routes.js';
@@ -16,6 +16,7 @@ const router = Express.Router();
 const PORT = process.env.PORT || 8080;
 
 app.use(cors());
+app.use(helmet());
 app.use(Express.json());
 app.use(Express.urlencoded({ extended: true }));
 app.get('/', (req, res) => {

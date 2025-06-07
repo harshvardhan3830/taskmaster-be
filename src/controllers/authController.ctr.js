@@ -2,31 +2,37 @@ import User from '../models/user.mod.js';
 import { validationResult } from 'express-validator';
 import { comparePassword, hashPassword } from '../utils/bcrypthelper.js';
 import { generateToken } from '../utils/jwtHelper.js';
+import {
+    successResponse,
+    errorResponse,
+    createdResponse,
+    badRequestResponse,
+    unauthorizedResponse,
+} from '../utils/responseWrapper.js';
 
 export const register = async (req, res) => {
     try {
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
-            return res.status(400).json({ errors: errors.array() });
+            return badRequestResponse(res, 'Validation failed', errors.array());
         }
 
-        const { name, email, password, role } = req.body;
-        // Validate input data
-        if (!name || !email || !password) {
-            return res.status(400).json({ error: 'Name, email, and password are required' });
-        }
-        // Check if user already exists
-        const existingUser = await User.find({ email });
+        const { name, username, email, password } = req.body;
 
-        console.log('existingUser', existingUser);
-        if (existingUser.length > 0) {
-            return res.status(400).json({ message: 'User already exists', success: false });
+        if (!name || !username || !email || !password) {
+            return badRequestResponse(res, 'Name, username, email, and password are required');
         }
-        // Hash the password
+
+        const existingUser = await User.findOne({ email });
+        console.log('existing user ===>>> ', existingUser);
+        if (existingUser) {
+            return badRequestResponse(res, 'User already exists');
+        }
+
         const hashedPassword = await hashPassword(password);
-        // Create a new user
         const newUser = new User({
             name,
+            username,
             email,
             password: hashedPassword,
         });
@@ -37,12 +43,11 @@ export const register = async (req, res) => {
             expiresIn: '7d',
         });
 
-        return res
-            .status(201)
-            .json({ message: 'User registered successfully', data: { user: newUser, token }, success: true });
+        const { password: _, ...userWithoutPassword } = newUser.toObject();
+        return createdResponse(res, 'User registered successfully', { user: userWithoutPassword, token });
     } catch (error) {
         console.error('Error during registration:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        return errorResponse(res, 'Internal server error');
     }
 };
 
@@ -50,40 +55,35 @@ export const login = async (req, res) => {
     try {
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
-            return res.status(400).json({ errors: errors.array() });
+            return badRequestResponse(res, 'Validation failed', errors.array());
         }
 
         const { email, password } = req.body;
-        // Validate input data
+
         if (!email || !password) {
-            return res.status(400).json({ error: 'Email and password are required' });
+            return badRequestResponse(res, 'Email and password are required');
         }
-        // Find the user by email
+
         const user = await User.findOne({ email });
         if (!user) {
-            return res.status(401).json({ error: 'Invalid email or password' });
+            return unauthorizedResponse(res, 'Invalid email or password');
         }
-        // Compare the password
+
         const isMatch = await comparePassword(password, user.password);
-
         if (!isMatch) {
-            return res.status(401).json({ error: 'Invalid email or password' });
+            return unauthorizedResponse(res, 'Invalid email or password');
         }
 
-        const { password: _, ...userWithoutPassword } = user.toObject();
-        // Generate a token
         const token = generateToken({ id: user._id, email: user.email }, process.env.JWT_SECRET, {
             expiresIn: '7d',
         });
 
-        await User.findByIdAndUpdate(user._id, { lastLogin: new Date() });
+        const { password: _, ...userWithoutPassword } = user.toObject();
 
-        return res
-            .status(200)
-            .json({ message: 'Login successful', data: { user: userWithoutPassword, token }, success: true });
+        return successResponse(res, 'Login successful', { user: userWithoutPassword, token });
     } catch (error) {
         console.error('Error during login:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        return errorResponse(res, 'Internal server error');
     }
 };
 
